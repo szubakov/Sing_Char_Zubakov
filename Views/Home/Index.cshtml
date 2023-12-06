@@ -1,0 +1,104 @@
+﻿@model List<Mess>
+@{
+    ViewData["Title"] = "Главная страница";
+}
+
+<div class="text-left">
+    <h1 class="display-4">Хай, @(User.Identity?.Name?? "гость" )</h1>
+    <div asp-validation-summary="All"></div>
+    @if(!User.Identity.IsAuthenticated)
+    {
+        <form action="/Home/Login" method="post">
+            <div class="mb-3">
+                <label class="form-label">Введите имя</label>
+                <input type="text" name="name" class="form-control"/>
+            </div>
+            <button type="submit" class="btn btn-primary">Вход</button>
+        </form>
+      @*   <div id="inputForm">
+            <input type="text" id="message" />
+            <input type="button" id="sendBtn" value="Отправить" disabled="disabled" />
+        </div>*@
+    }
+    else
+    {
+        <div id="inputForm">
+            <input type="text" id="message" />
+            <input type="button" id="sendBtn" value="Отправить" disabled="disabled" />
+        </div>
+        <script>
+            
+
+            document.getElementById("sendBtn").addEventListener("click", function () {
+                let message = document.getElementById("message").value;
+                hubConnection.invoke("Send", message)
+                    .catch(function (err) {
+                        return console.error(err.toString());
+                    });
+            });
+        </script>
+    }
+
+  
+    <div id="chatroom"></div>
+
+    @foreach(var mess in Model)
+    {
+        <p id="message_@mess.Id">
+            @mess.Date.ToString("dd.MM HH:mm") <i>@mess.User.Name </i><br />
+            @mess.Text<br />
+            @if(User.IsInRole(UserRole.Admin.ToString()))
+            {
+                <a href="# " class="delete_message btn btn-danger" data-id="@mess.Id">Удалить сообщение</a>
+            }
+           </p>
+    }
+</div>
+
+<script>
+    var isAdmin = @(User.IsInRole(UserRole.Admin.ToString()) ? "true" : "false");
+    const hubConnection = new signalR.HubConnectionBuilder()
+        .withUrl("/chat")
+        .build();
+
+    $(document).on('click', '.delete_message', function () {
+      var messageId =   $(this).data('id')
+        hubConnection.invoke("DeleteMessage", messageId)
+            .catch(function (err) {
+                return console.error(err.toString());
+            });
+        console.log("delete_message clicked")
+
+    })
+      
+
+    hubConnection.on("Receive", function (message) {
+        let mes = '<p id="message_' + message.id + '">'
+
+        mes += message.date + " <i>" + message.name + "</i> <br/ > " + message.message + "<br />";
+
+        if (isAdmin) mes += '<a href ="#" class="delete_message" data-id="'+ message.id+ '"> Удалить сообщение </a>'
+         mes += '</p>'
+
+        let messageElement = document.createElement("p");
+        messageElement.innerHTML = mes
+
+
+
+        document.getElementById("chatroom").prepend(messageElement);
+    });
+    hubConnection.on("HideMessage", function (id) {
+        $('#message_'+ id).remove();
+        console.log("Hide message", id)
+    });
+
+    hubConnection.start()
+        .then(function () {
+            if (document.getElementById("sendBtn")) document.getElementById("sendBtn").disabled = false;
+          console.log("Подключение успешно")
+        })
+        .catch(function (err) {
+            return console.error(err.toString());
+        });
+
+</script>
